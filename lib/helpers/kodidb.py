@@ -560,6 +560,8 @@ class KodiDb(object):
                 item["plot"] = item["comment"]
             if "tvshowtitle" not in item and "showtitle" in item:
                 item["tvshowtitle"] = item["showtitle"]
+            if "tvshowtitle" not in item and "title" in item:
+                item["tvshowtitle"] = item["title"]
             if "premiered" not in item and "firstaired" in item:
                 item["premiered"] = item["firstaired"]
             if "firstaired" in item and "aired" not in item:
@@ -570,6 +572,8 @@ class KodiDb(object):
                 for value in item["uniqueid"].values():
                     if value.startswith("tt"):
                         properties["imdbnumber"] = value
+            if "overlay" not in item and "playcount" in item:
+                item["overlay"] = 5 if item["playcount"] > 0 else 4
 
             properties["dbtype"] = item["type"]
             properties["DBTYPE"] = item["type"]
