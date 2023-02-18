@@ -7,17 +7,12 @@ import os, sys
 import xbmc
 import xbmcgui
 import xbmcvfs
-if sys.version_info.major == 3:
-    from .utils import json, try_encode, log_msg, log_exception, get_clean_image, KODI_VERSION
-    from .utils import try_parse_int, localdate_from_utc_string, localized_date_time
-    from .kodi_constants import *
-else: 
-    from utils import json, try_encode, log_msg, log_exception, get_clean_image, KODI_VERSION
-    from utils import try_parse_int, localdate_from_utc_string, localized_date_time
-    from kodi_constants import *
+from .utils import json, try_encode, log_msg, log_exception, get_clean_image, KODI_VERSION
+from .utils import try_parse_int, localdate_from_utc_string, localized_date_time
+from .kodi_constants import *
 from operator import itemgetter
 import arrow
-
+from infotagger.listitem import ListItemInfoTag
 
 class KodiDb(object):
     """various methods and helpers to get data from kodi json api"""
@@ -248,10 +243,7 @@ class KodiDb(object):
         kodi_json["params"] = params
         kodi_json["id"] = 1
         json_response = xbmc.executeJSONRPC(try_encode(json.dumps(kodi_json)))
-        if sys.version_info.major == 3:
-            return json.loads(json_response)
-        else:
-            return json.loads(json_response.decode('utf-8', 'replace'))
+        return json.loads(json_response)
 
     @staticmethod
     def get_json(jsonmethod, sort=None, filters=None, fields=None, limits=None,
@@ -282,10 +274,7 @@ class KodiDb(object):
         if limits:
             kodi_json["params"]["limits"] = {"start": limits[0], "end": limits[1]}
         json_response = xbmc.executeJSONRPC(try_encode(json.dumps(kodi_json)))
-        if sys.version_info.major == 3:
-            json_object = json.loads(json_response)
-        else:
-            json_object = json.loads(json_response.decode('utf-8', 'replace'))
+        json_object = json.loads(json_response)
         # set the default returntype to prevent errors
         if "details" in jsonmethod.lower():
             result = {}
@@ -297,14 +286,9 @@ class KodiDb(object):
                 result = json_object['result'][returntype]
             else:
                 # no returntype specified, we'll have to look for it
-                if sys.version_info.major == 3:
-                    for key, value in json_object['result'].items():
-                        if not key == "limits" and (isinstance(value, list) or isinstance(value, dict)):
-                            result = value
-                else:
-                    for key, value in json_object['result'].items():
-                        if not key == "limits" and (isinstance(value, list) or isinstance(value, dict)):
-                            result = value
+                for key, value in json_object['result'].items():
+                    if not key == "limits" and (isinstance(value, list) or isinstance(value, dict)):
+                        result = value
         else:
             log_msg(json_response)
             log_msg(kodi_json)
@@ -316,10 +300,7 @@ class KodiDb(object):
         allfavourites = []
         try:
             from xml.dom.minidom import parse
-            if sys.version_info.major == 3:
-                favourites_path = xbmcvfs.translatePath('special://profile/favourites.xml')
-            else:
-                favourites_path = xbmc.translatePath('special://profile/favourites.xml').decode("utf-8")
+            favourites_path = xbmcvfs.translatePath('special://profile/favourites.xml')
             if xbmcvfs.exists(favourites_path):
                 doc = parse(favourites_path)
                 result = doc.documentElement.getElementsByTagName('favourite')
@@ -361,6 +342,7 @@ class KodiDb(object):
                     label2=item.get("label2", ""),
                     path=item['file'],
                     offscreen=offscreen)
+                info_tag = ListItemInfoTag(liz, 'video', type_check=True)
             else:
                 liz = xbmcgui.ListItem(
                     label=item.get("label", ""),
@@ -378,12 +360,8 @@ class KodiDb(object):
                 nodetype = "Music"
 
             # extra properties
-            if sys.version_info.major == 3:
-                for key, value in item["extraproperties"].items():
-                    liz.setProperty(key, value)
-            else:
-                for key, value in item["extraproperties"].items():
-                    liz.setProperty(key, value)
+            for key, value in item["extraproperties"].items():
+                 liz.setProperty(key, value)
 
             # video infolabels
             if nodetype == "Video":
@@ -391,8 +369,6 @@ class KodiDb(object):
                     "title": item.get("title"),
                     "path": item.get("file"),
                     "size": item.get("size"),
-                    "genre": item.get("genre"),
-                    "year": item.get("year"),
                     "top250": item.get("top250"),
                     "tracknumber": item.get("tracknumber"),
                     "rating": item.get("rating"),
@@ -400,16 +376,13 @@ class KodiDb(object):
                     "overlay": item.get("overlay"),
                     "cast": item.get("cast"),
                     "castandrole": item.get("castandrole"),
-                    "director": item.get("director"),
                     "mpaa": item.get("mpaa"),
                     "plot": item.get("plot"),
                     "plotoutline": item.get("plotoutline"),
                     "originaltitle": item.get("originaltitle"),
                     "sorttitle": item.get("sorttitle"),
                     "duration": item.get("duration"),
-                    "studio": item.get("studio"),
                     "tagline": item.get("tagline"),
-                    "writer": item.get("writer"),
                     "tvshowtitle": item.get("tvshowtitle"),
                     "premiered": item.get("premiered"),
                     "status": item.get("status"),
@@ -418,38 +391,50 @@ class KodiDb(object):
                     "aired": item.get("aired"),
                     "credits": item.get("credits"),
                     "album": item.get("album"),
-                    "artist": item.get("artist"),
                     "votes": item.get("votes"),
                     "trailer": item.get("trailer")
                 }
-                #ERROR: NEWADDON Unknown Video Info Key "progress" in Kodi 19 ?!
-                if KODI_VERSION < 18:
-                    infolabels["progress"] = item.get('progresspercentage')
-                if item["type"] == "episode":
+
+                if "season" in item:
                     infolabels["season"] = item["season"]
                     infolabels["episode"] = item["episode"]
-
+                if "resume" in item:
+                    resume_float = float(item['resume']['position'])
+                    total_float = float(item['resume']['total'])
+                    info_tag._info_tag.setResumePoint(time=resume_float, totaltime=total_float)
                 # streamdetails
-                if item.get("streamdetails"):
-                    liz.addStreamInfo("video", item["streamdetails"].get("video", {}))
-                    liz.addStreamInfo("audio", item["streamdetails"].get("audio", {}))
-                    liz.addStreamInfo("subtitle", item["streamdetails"].get("subtitle", {}))
-
+                if item.get("streamdetails"):				
+                    stream_details = {
+						'video': [item["streamdetails"].get("video", {})],
+						'audio': [item["streamdetails"].get("audio", {})],
+						'subtitle': [item["streamdetails"].get("subtitle", {})]}
+                    info_tag.set_stream_details(stream_details)
                 if "dateadded" in item:
                     infolabels["dateadded"] = item["dateadded"]
                 if "date" in item:
                     infolabels["date"] = item["date"]
-
+                if "studio" in item:
+                    infolabels["studio"] = item["studio"]
+                if "genre" in item:
+                    infolabels["genre"] = item["genre"]					
+                if "writer" in item:
+                    infolabels["writer"] = item["writer"]		
+                if "director" in item:
+                    infolabels["director"] = item["director"]
+                if "country" in item:
+                    infolabels["country"] = item["country"]
+                if item["type"] in ["movie"] and "year" in item:
+                    infolabels["year"] = item["year"]
+                if "tag" in item:
+                    infolabels["tag"] = item["tag"]
             # music infolabels
             else:
                 infolabels = {
                     "title": item.get("title"),
                     "size": item.get("size"),
-                    "genre": item.get("genre"),
                     "year": item.get("year"),
                     "tracknumber": item.get("track"),
                     "album": item.get("album"),
-                    "artist": " / ".join(item.get('artist')),
                     "rating": str(item.get("rating", 0)),
                     "lyrics": item.get("lyrics"),
                     "playcount": item.get("playcount")
@@ -457,12 +442,12 @@ class KodiDb(object):
                 if "date" in item:
                     infolabels["date"] = item["date"]
                 if "duration" in item:
-                    infolabels["duration"] = item["duration"]
+                    infolabels["duration"] = item["runtime"]
                 if "lastplayed" in item:
                     infolabels["lastplayed"] = item["lastplayed"]
 
             # setting the dbtype and dbid is supported from kodi krypton and up
-            if KODI_VERSION > 16 and item["type"] not in ["recording", "channel", "favourite", "genre", "categorie"]:
+            if item["type"] not in ["recording", "channel", "favourite", "genre", "categorie"]:
                 infolabels["mediatype"] = item["type"]
                 # setting the dbid on music items is not supported ?
                 if nodetype == "Video" and "DBID" in item["extraproperties"]:
@@ -472,20 +457,14 @@ class KodiDb(object):
                 infolabels["lastplayed"] = item["lastplayed"]
 
             # assign the infolabels
-            liz.setInfo(type=nodetype, infoLabels=infolabels)
-
+            info_tag.set_info(infolabels)
             # artwork
             liz.setArt(item.get("art", {}))
             if KODI_VERSION > 17:
                 if "icon" in item:
-                    liz.setArt({"icon":item['icon']})
+                    liz.setArt({"icon":get_clean_image(item['icon'])})
                 if "thumbnail" in item:
-                    liz.setArt({"thumb":item['thumbnail']})
-            else:
-                if "icon" in item:
-                    liz.setIconImage(item['icon'])
-                if "thumbnail" in item:
-                    liz.setThumbnailImage(item['thumbnail'])
+                    liz.setArt({"thumb":get_clean_image(item['thumbnail'])})
 
             # contextmenu
             if item["type"] in ["episode", "season"] and "season" in item and "tvshowid" in item:
@@ -510,10 +489,17 @@ class KodiDb(object):
             return None
 
     @staticmethod
-    def prepare_listitem(item):
+    def prepare_listitem(item, offscreen=True):
         """helper to convert kodi output from json api to compatible format for listitems"""
+        liz = xbmcgui.ListItem(
+            label=item.get("label", ""),
+            label2=item.get("label2", ""),
+            path=item['file'],
+            offscreen=offscreen)
+        info_tagger = ListItemInfoTag(liz, 'video')
         try:
             # fix values returned from json to be used as listitem values
+			
             properties = item.get("extraproperties", {})
 
             # set type
@@ -537,16 +523,7 @@ class KodiDb(object):
                     break
 
             # general properties
-            if "genre" in item and isinstance(item['genre'], list):
-                item["genre"] = " / ".join(item['genre'])
-            if "studio" in item and isinstance(item['studio'], list):
-                item["studio"] = " / ".join(item['studio'])
-            if "writer" in item and isinstance(item['writer'], list):
-                item["writer"] = " / ".join(item['writer'])
-            if 'director' in item and isinstance(item['director'], list):
-                item["director"] = " / ".join(item['director'])
-            if 'artist' in item and not isinstance(item['artist'], list):
-                item["artist"] = [item['artist']]
+
             if 'artist' not in item:
                 item["artist"] = []
             if item['type'] == "album" and 'album' not in item and 'label' in item:
@@ -576,7 +553,6 @@ class KodiDb(object):
                 item["overlay"] = 5 if item["playcount"] > 0 else 4
 
             properties["dbtype"] = item["type"]
-            properties["DBTYPE"] = item["type"]
             properties["type"] = item["type"]
             properties["path"] = item.get("file")
 
@@ -598,12 +574,6 @@ class KodiDb(object):
 
             if "season" in item and "episode" in item:
                 properties["episodeno"] = "s%se%s" % (item.get("season"), item.get("episode"))
-            if "resume" in item:
-                properties["resumetime"] = str(item['resume']['position'])
-                properties["totaltime"] = str(item['resume']['total'])
-                properties['StartOffset'] = str(item['resume']['position'])
-
-            # streamdetails
             if "streamdetails" in item:
                 streamdetails = item["streamdetails"]
                 audiostreams = streamdetails.get('audio', [])
@@ -672,6 +642,8 @@ class KodiDb(object):
                 # set date to startdate
                 item["date"] = arrow.get(item["starttime"]).format("DD.MM.YYYY")
             if "channellogo" in item:
+                properties["FileExtension"] = "pvr"
+            if "channellogo" in item:
                 properties["channellogo"] = item["channellogo"]
                 properties["channelicon"] = item["channellogo"]
             if "episodename" in item:
@@ -712,18 +684,11 @@ class KodiDb(object):
                 item["thumbnail"] = art["thumb"]
 
             # clean art
-            if sys.version_info.major == 3:
-                for key, value in art.items():
-                    if not isinstance(value, str):
-                        art[key] = ""
-                    elif value:
-                        art[key] = get_clean_image(value)
-            else:
-                for key, value in art.iteritems():
-                    if not isinstance(value, (str, unicode)):
-                        art[key] = ""
-                    elif value:
-                        art[key] = get_clean_image(value)
+            for key, value in art.items():
+                if not isinstance(value, str):
+                    art[key] = ""
+                elif value:
+                    art[key] = get_clean_image(value)
             item["art"] = art
 
             item["extraproperties"] = properties

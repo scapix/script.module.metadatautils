@@ -8,10 +8,7 @@
 """
 
 import os, sys
-if sys.version_info.major == 3:
-    from .utils import get_json, KODI_LANGUAGE, try_parse_int, DialogSelect, get_compare_string, int_with_commas, ADDON_ID
-else:
-    from utils import get_json, KODI_LANGUAGE, try_parse_int, DialogSelect, get_compare_string, int_with_commas, ADDON_ID
+from .utils import get_json, KODI_LANGUAGE, try_parse_int, DialogSelect, get_compare_string, int_with_commas, ADDON_ID
 from difflib import SequenceMatcher as SM
 from simplecache import use_cache
 from operator import itemgetter
@@ -216,10 +213,7 @@ class Tmdb(object):
             # without personal (or addon specific) api key = rate limiting and older info from cache
             rate_limit = ("themoviedb.org", 5)
             expiration = datetime.timedelta(days=60)
-        if sys.version_info.major == 3:
-            cachestr = "tmdb.%s" % params.values()
-        else:
-            cachestr = "tmdb.%s" % params.itervalues()
+        cachestr = "tmdb.%s" % params.values()
         cache = self.cache.get(cachestr)
         if cache:
             # data obtained from cache
@@ -256,6 +250,7 @@ class Tmdb(object):
         details["status"] = data["status"]
         details["cast"] = []
         details["castandrole"] = []
+        details["crew"] = []
         details["writer"] = []
         details["director"] = []
         details["media_type"] = media_type
@@ -266,11 +261,17 @@ class Tmdb(object):
                     cast_thumb = ""
                     if crew_member["profile_path"]:
                         cast_thumb = "https://image.tmdb.org/t/p/original%s" % crew_member["profile_path"]
-                        if crew_member["job"] in ["Screenplay"]:
+                        if crew_member["department"] in ["Writing"]:
                             details["writer.thumb"] = cast_thumb
+                        if crew_member["job"] in ["Author"]:
+                            details["writer.thumb"] = cast_thumb
+                        if crew_member["job"] in ["Executive Producer"]:
+                            details["director.thumb"] = cast_thumb   
                         if crew_member["job"] in ["Director"]:
-                            details["director.thumb"] = cast_thumb 
-        if "credits" in data:      
+                            details["director.thumb"] = cast_thumb
+                        if crew_member["job"] in ["Creator"]:
+                            details["director.thumb"] = cast_thumb     
+        if "credits" in data:       
             if "cast" in data["credits"]:
                 for cast_member in data["credits"]["cast"]:
                     cast_thumb = ""
@@ -278,7 +279,12 @@ class Tmdb(object):
                         cast_thumb = "https://image.tmdb.org/t/p/original%s" % cast_member["profile_path"]
                     details["cast"].append({"name": cast_member["name"], "role": cast_member["character"],
                                             "thumbnail": cast_thumb})
-                    details["castandrole"].append((cast_member["name"], cast_member["character"]))
+                    castandrole = "%s (%s)" % (cast_member["name"], cast_member["character"])
+                    details["castandrole"].append(castandrole)
+                for count, item in enumerate(data["credits"]["cast"]):
+                    if count < 4:
+                        details["cast.%s.name" % count] = item["name"]
+                        details["cast.%s.thumb" % count] = "https://image.tmdb.org/t/p/original%s" % item["profile_path"] 
             # crew (including writers and directors)
             if "crew" in data["credits"]:
                 for crew_member in data["credits"]["crew"]:
@@ -292,6 +298,8 @@ class Tmdb(object):
                     if crew_member["job"] in ["Producer", "Executive Producer", "Author", "Writer"]:
                         details["cast"].append({"name": crew_member["name"], "role": crew_member["job"],
                                                 "thumbnail": cast_thumb})
+                    crew = "%s (%s)" % (crew_member["name"], crew_member["job"])
+                    details["crew"].append(crew)                            
         # artwork
         details["art"] = {}
         if data.get("images"):
@@ -326,6 +334,10 @@ class Tmdb(object):
             details["revenue.formatted"] = int_with_commas(data["revenue"])
             if data.get("production_companies"):
                 details["studio"] = [item["name"] for item in data["production_companies"]]
+                for count, item in enumerate(data["production_companies"]):
+                        details["name.%s.studio" % count] = item["name"]
+                        details["logo.%s.studio" % count] = "https://image.tmdb.org/t/p/h50_filter(negate,000,666)%s" % item["logo_path"]
+                        details["country.%s.studio" % count] = item["origin_country"]
             if data.get("production_countries"):
                 details["country"] = [item["name"] for item in data["production_countries"]]
             if data.get("keywords"):
@@ -345,6 +357,10 @@ class Tmdb(object):
                 details["lastaired"] = data["last_air_date"]
             if data.get("networks"):
                 details["studio"] = [item["name"] for item in data["networks"]]
+                for count, item in enumerate(data["networks"]):
+                        details["name.%s.studio" % count] = item["name"]
+                        details["logo.%s.studio" % count] = "https://image.tmdb.org/t/p/h50_filter(negate,000,666)%s" % item["logo_path"]
+                        details["country.%s.studio" % count] = item["origin_country"]
             if "origin_country" in data:
                 details["country"] = data["origin_country"]
             if "number_of_seasons" in data:
